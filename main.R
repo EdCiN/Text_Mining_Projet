@@ -45,3 +45,4 @@ words <- names(frequency)
 wordcloud(words[1:100], word_freq[1:100])
 
 ######################Partie 2 ################################################
+
