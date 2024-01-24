@@ -57,6 +57,140 @@ head(frequency)
 # words <- names(frequency)
 # wordcloud(words[1:100], frequency[1:100], color = brewer.pal(8,"Dark2"))
 
+####################### Partie II ################################################
+
+############## Création d'un dataframe avec les sujets Iraq, Covid, Climate et Other ##############################
+library(dplyr)
+
+library(stringr)
+
+#Df
+df <- data %>%
+  mutate(topic = case_when(
+    str_detect(headline_text, "\\biraq\\b") ~ "Iraq", 
+    str_detect(headline_text, "\\bcovid\\b") ~ "Covid",
+    str_detect(headline_text, "\\bclimate\\b") ~ "Climate",
+    TRUE ~ "Other"
+  ))
+
+# On supprime les lignes qui contiennent le sujet "Other"
+df <- df %>%
+  filter(topic != "Other")
+
+########################## On affiche les sujets et leur wordcloud ##############################
+library(tm)
+library(wordcloud)
+
+
+# On divise le dataframe par sujet
+data_split <- split(df$headline_text, df$topic)
+
+#fonction pour nettoyer et calculer les fréquences de mots
+get_word_frequencies <- function(texts) {
+  corpus <- Corpus(VectorSource(texts))
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, removeWords, stopwords("french"))
+  dtm <- DocumentTermMatrix(corpus)
+  frequency <- colSums(as.matrix(dtm))
+  frequency <- sort(frequency, decreasing = TRUE)
+  return(frequency)
+}
+
+# Calcule des fréquences de mots pour chaque sujet
+frequencies <- lapply(data_split, get_word_frequencies)
+
+#wordcloud pour chaque sujet
+for (topic in names(frequencies)) {
+  frequency <- frequencies[[topic]]
+  words <- names(frequency)
+  wordcloud(words[1:100], frequency[1:100], main = paste("Wordcloud for topic:", topic))
+}
+
+
+###################### Modèle Bayesien ########################################
+
+### On regarde la proportion
+class_counts <- table(df$topic)
+class_proportions <- class_counts / nrow(df)
+print(class_proportions)
+
+
+###### Train/Test
+# Charger le package
+library(tibble)
+library(caret)
+
+set.seed(25) 
+trainIndex <- createDataPartition(df$topic, p = .8, 
+                                  list = FALSE, 
+                                  times = 1, 
+                        
+                                  )
+
+trainSet <- df[trainIndex, ]
+testSet  <- df[-trainIndex, ]
+
+##verif proportion dans le train et le test
+#train
+train_class_counts <- table(trainSet$topic)
+train_class_proportions <- train_class_counts / nrow(trainSet)
+print(train_class_proportions)
+
+#test
+test_class_counts <- table(testSet$topic)
+test_class_proportions <- test_class_counts / nrow(testSet)
+print(test_class_proportions)
+
+#Les proportions sont similaires dans le train et le test
+
+### Model bayesien
+
+library(e1071)
+
+#Corpus
+crp= Corpus(VectorSource(trainSet$headline_text))
+#Cleaning
+clean_crp <- tm_map(crp, content_transformer(tolower))
+stopwords(kind="en")
+clean_crp <- tm_map(clean_crp, removeWords, stopwords("english"))
+clean_crp <- tm_map(clean_crp, removePunctuation)
+clean_crp <- tm_map(clean_crp, removeNumbers)
+#matrice
+matrice=as.matrix(DocumentTermMatrix(clean_crp))
+train_dtm_df=as.data.frame(matrice)
+# Ajout colonne de la classe au dataframe
+train_dtm_df$topic <- trainSet$topic
+train_dtm_df$topic= as.factor(train_dtm_df$topic)
+
+# Créer un modèle bayésien naïf à partir de l'ensemble d'apprentissage
+model <- naiveBayes(topic ~ ., data = train_dtm_df)
+
+model
+
+# Préparation des données de test de la même manière
+test_corpus <- Corpus(VectorSource(testSet$headline_text))
+clean_crp <- tm_map(test_corpus, content_transformer(tolower))
+stopwords(kind="en")
+clean_crp <- tm_map(clean_crp, removeWords, stopwords("english"))
+clean_crp <- tm_map(clean_crp, removePunctuation)
+clean_crp <- tm_map(clean_crp, removeNumbers)
+
+test_dtm <- DocumentTermMatrix(clean_crp,control = list(dictionary = Terms(DocumentTermMatrix(clean_crp))))
+test_dtm_df <- as.data.frame(as.matrix(test_dtm))
+
+
+#Prédiction
+predictions <- predict(model, newdata = test_dtm_df)
+
+# Afficher les prédictions
+print(predictions)
+
+#Matrice confusion
+(Confusion=table(testSet$topic,predictions))
+# Accuracy  
+sum(diag(Confusion))/sum(Confusion)
 
 
 ############### Partie III : Définir des clusters de dépêches ##################
