@@ -44,7 +44,8 @@ frequency <- sort(frequency, decreasing = TRUE)
 words <- names(frequency)
 wordcloud(words[1:100], word_freq[1:100])
 
-####################### Partie 2 ################################################
+
+####################### Partie II ################################################
 
 ############## Création d'un dataframe avec les sujets Iraq, Covid, Climate et Other ##############################
 library(dplyr)
