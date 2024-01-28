@@ -1,3 +1,9 @@
+---
+title: "R Notebook Text Mining"
+output: html_notebook
+---
+
+
 ```{r}
 ################################################################################
 ######################### Projet Text Mining ###################################
@@ -17,20 +23,18 @@ head(data)
 ```{r}
 ##################### Partie I : De quoi parlait-on en ... ? ###################
 
-# filter = (data['publish_date'] > 20030201) & (data['publish_date'] <= 20191231)
-# filter2 = (data['publish_date'] >20080301) & (data['publish_date'] <= 20080831)
-
-filter3 = (data['publish_date'] >20080301) & (data['publish_date'] <= 20080304)
 # Données entre 01/02/2003 et 31/12/2019
+# filter = (data['publish_date'] > 20030201) & (data['publish_date'] <= 20191231)
+
+# Données entre 01/03/2008 et 31/08/2008
+filter2 = (data['publish_date'] >20080301) & (data['publish_date'] <= 20080831)
+
 # data_filtered = data[filter,]
 
-# Données dans l'année 2008
-# data_filtered_2008 = data[filter2,]
+data_filtered_2008_2 = data[filter2,]
 
-data_filtered_2008_2 = data[filter3,]
 # Conversion en VCorpus
 Vdata = VCorpus(VectorSource(data_filtered_2008_2$headline_text))
-
 
 # Nettoyage du contenu : suppression des stopwords, de la ponctuation et 
 # conversion en caractères minuscules
@@ -51,13 +55,13 @@ cleaned_corpus = tm_map(cleaned_corpus, removeWords, custom_stopwords)
 dtm <- DocumentTermMatrix(cleaned_corpus)
 matrix <- as.matrix(dtm)
 
-# dim(matrix) # 40554 documents * 19978 mots dans le vocabulaire: 
+print(paste("Dimension du bag of words : ",list(dim(matrix))))
 
 # sparsity(matrix) # 0.9997488
 
 frequency <- colSums(matrix)
 frequency <-sort(frequency, decreasing = TRUE)
-head(frequency)
+print(paste("Mots les plus fréquents : ",list(head(frequency))))
 ```
 
 
@@ -65,24 +69,36 @@ head(frequency)
 words <- names(frequency)
 wordcloud(words[1:100], frequency[1:100], color = brewer.pal(8,"Dark2"))
 ```
+```{r}
+## Commentaire 
+
+# On remarque que police n'est pas présent dans le wordcloud
+# Il s'agit du mot le plus fréquent.
+# On retrouve en général des mots liés à l'Australie (qld, nrl, Sydney)
+# On retrouve également le mot "Olympics", ce qui était attendu pour l'année 2008
+# On retrouve beaucoup de mots du registre de la politique et de l'économie : 
+# "govt", "interview", "death", "talks", "man", "court"...
+```
+
+
 
 
 ```{r}
-####################### Partie II ################################################
+##### Partie II : Partie II : Associer des classes à des dépêches ##############
 
-############## Création d'un dataframe avec les sujets Iraq, Covid, Climate et Other ##############################
+#### Création d'un dataframe avec les sujets Iraq, Covid, Climate et Other #####
+
 library(dplyr)
 library(stringr)
 
-#Df
+# Df
 df <- data %>%
   mutate(topic = case_when(
     str_detect(headline_text, "\\biraq\\b") ~ "Iraq", 
     str_detect(headline_text, "\\bcovid\\b") ~ "Covid",
-    str_detect(headline_text, "\\bclimate\\b") ~ "Climate",
+    str_detect(headline_text, "\\bolympic\\b") ~ "Olympic",
     TRUE ~ "Other"
   ))
-
 # On supprime les lignes qui contiennent le sujet "Other"
 df <- df %>%
   filter(topic != "Other")
@@ -90,37 +106,43 @@ df <- df %>%
 
 
 ```{r}
-########################## On affiche les sujets et leur wordcloud ##############################
+################### On affiche les sujets et leur wordcloud ####################
 library(tm)
 library(wordcloud)
-
 
 # On divise le dataframe par sujet
 data_split <- split(df$headline_text, df$topic)
 
-#fonction pour nettoyer et calculer les fréquences de mots
+# Fonction pour nettoyer et calculer les fréquences de mots
 get_word_frequencies <- function(texts) {
   corpus <- Corpus(VectorSource(texts))
   corpus <- tm_map(corpus, content_transformer(tolower))
   corpus <- tm_map(corpus, removePunctuation)
   corpus <- tm_map(corpus, removeNumbers)
-  corpus <- tm_map(corpus, removeWords, stopwords("french"))
+  corpus <- tm_map(corpus, removeWords, stopwords("english"))
   dtm <- DocumentTermMatrix(corpus)
   frequency <- colSums(as.matrix(dtm))
   frequency <- sort(frequency, decreasing = TRUE)
   return(frequency)
 }
 
-# Calcule des fréquences de mots pour chaque sujet
+# Calcul des fréquences de mots pour chaque sujet
 frequencies <- lapply(data_split, get_word_frequencies)
 
-#wordcloud pour chaque sujet
+# Wordcloud pour chaque sujet
 for (topic in names(frequencies)) {
   frequency <- frequencies[[topic]]
   words <- names(frequency)
-  wordcloud(words[1:100], frequency[1:100], main = paste("Wordcloud for topic:", topic))
+  wordcloud(words[1:100], frequency[1:100], main = paste("Wordcloud for topic:",
+                                                         topic))
 }
 ```
+```{r}
+# On a représenté ci-dessus des wordclouds pour chaque catégorie de documents : 
+# par exemple, pour tous les documents contenant le mot "Covid", on a recensé 
+# les mots les plus fréquents, représentés sous la forme d'un nuage de mots.
+```
+
 
 ```{r}
 ###################### Modèle Bayesien ########################################
@@ -128,13 +150,14 @@ for (topic in names(frequencies)) {
 ### On regarde la proportion
 class_counts <- table(df$topic)
 class_proportions <- class_counts / nrow(df)
-print(class_proportions)
+print(paste("Proportion de chaque classe : ", (list(class_proportions))))
 ```
 
 
 ```{r}
 ###### Train/Test
 # Charger le package
+
 library(tibble)
 library(caret)
 
@@ -147,83 +170,116 @@ trainIndex <- createDataPartition(df$topic, p = .8,
 
 trainSet <- df[trainIndex, ]
 testSet  <- df[-trainIndex, ]
+```
 
-##verif proportion dans le train et le test
-#train
+
+```{r}
+## Verif proportion dans le train et le test
+
+# Train
 train_class_counts <- table(trainSet$topic)
 train_class_proportions <- train_class_counts / nrow(trainSet)
+print("Proportion des classes dans le train set : ")
 print(train_class_proportions)
 ```
 
 
 ```{r}
-#test
+# Test
 test_class_counts <- table(testSet$topic)
 test_class_proportions <- test_class_counts / nrow(testSet)
+print("Proportion des classes dans le test set")
 print(test_class_proportions)
 
-#Les proportions sont similaires dans le train et le test
+# Les proportions sont similaires dans le train et le test
 ```
 
 
 ```{r}
 ### Model bayesien
+# Pour eviter le sur apprentissage et le biais on supprime les mots Iraq, Covid et Olympic
 
-library(e1071)
+library(stringr)
+trainSet <- trainSet %>%
+  mutate(headline_text = str_replace_all(headline_text, "\\b(iraq|covid|olympic)\\b", ""))
 
-#Corpus
+# Corpus
 crp= Corpus(VectorSource(trainSet$headline_text))
-#Cleaning
-clean_crp <- tm_map(crp, content_transformer(tolower))
 
+# Cleaning
+clean_crp <- tm_map(crp, content_transformer(tolower))
 clean_crp <- tm_map(clean_crp, removeWords, stopwords("english"))
 clean_crp <- tm_map(clean_crp, removePunctuation)
 clean_crp <- tm_map(clean_crp, removeNumbers)
-#matrice
+
+# Matrice
 matrice=as.matrix(DocumentTermMatrix(clean_crp))
-train_dtm_df=as.data.frame(matrice)
-# Ajout colonne de la classe au dataframe
-train_dtm_df$topic <- trainSet$topic
-train_dtm_df$topic= as.factor(train_dtm_df$topic)
 
-# Créer un modèle bayésien naïf à partir de l'ensemble d'apprentissage
-model <- naiveBayes(topic ~ ., data = train_dtm_df)
+# Création du modèle
 
-print(model$tables$police)
-print(model$tables$iraq)
-print(model$tables$council)
+library(naivebayes)
+model <- multinomial_naive_bayes(y=trainSet$topic,x=matrice)
 
-```
-
-
-```{r}
 # Préparation des données de test de la même manière
 test_corpus <- Corpus(VectorSource(testSet$headline_text))
 clean_crp <- tm_map(test_corpus, content_transformer(tolower))
-stopwords(kind="en")
 clean_crp <- tm_map(clean_crp, removeWords, stopwords("english"))
 clean_crp <- tm_map(clean_crp, removePunctuation)
 clean_crp <- tm_map(clean_crp, removeNumbers)
 
-test_dtm <- DocumentTermMatrix(clean_crp,control = list(dictionary = Terms(DocumentTermMatrix(clean_crp))))
-test_dtm_df <- as.data.frame(as.matrix(test_dtm))
+# Matrice
+test_dtm <- DocumentTermMatrix(clean_crp,
+                               control = list(dictionary =
+                                          Terms(DocumentTermMatrix(clean_crp))))
 
-
-#Prédiction
-predictions <- predict(model, newdata = test_dtm_df)
-
+# Prédiction
+predictions <- predict(model, newdata = as.matrix(test_dtm))
 # Afficher les prédictions
-print(predictions$tables$police)
-print(predictions$tables$iraq)
-print(predictions$tables$council)
+print("Prédictions : ")
+print(predictions)
 ```
 
 
 ```{r}
-#Matrice confusion
+############## Accuracy, precision, recall, f1 ##############################
+
+# Matrice confusion
+print("Matrice de confusion : ")
+cat("\n")
 (Confusion=table(testSet$topic,predictions))
+cat("\n")
+
 # Accuracy  
+print("Accuracy : ")
 sum(diag(Confusion))/sum(Confusion)
+cat("\n")
+
+# précision, rappel et score F1 pour chaque classe
+
+precision <- diag(Confusion) / colSums(Confusion)
+recall <- diag(Confusion) / rowSums(Confusion)
+f1 <- 2 * precision * recall / (precision + recall)
+
+# Afficher les résultats
+
+print("Précision : ")
+print(precision)
+cat("\n")
+print("Recall : ")
+print(recall)
+cat("\n")
+print("F1 Score : ")
+print(f1)
+
+```
+```{r}
+# Le jeu de données qu'on utilise pour cette partie est le corpus dont les 
+# documents contiennent au moins un des trois mots suivants : "iraq", "covid" ou
+# "olympics".
+# On effectue un train-test split sur ces documents, et on entraîne un 
+# classifieur bayésien multinomial sur les données d'entraînement auquel on a
+# retiré les mots "iraq", "covid" et "olympics" pour éviter un biais dû à 
+# la présence systématique de ces mots dans le jeu de test.
 ```
 
 
@@ -330,7 +386,7 @@ earlyDTMClean = function(frequentTermSet, dtm){
   return(dtm)
 }
 
-# Algorithme principal
+# Algorithme principal Frequent Term Sets
 selectTermSets <- function(dtm, minsup = 15){
   selectedTermSets = c()
   listCoverages = c()
@@ -384,7 +440,50 @@ selectTermSets <- function(dtm, minsup = 15){
 
 
 ```{r}
-findFreqTerms(dtm,15)
-selectTermSets(dtm,15)
+# Données entre 01/03/2008 et 04/03/2008
+filter3 = (data['publish_date'] >20080301) & (data['publish_date'] <= 20080304)
+
+data_filtered_2008_3 = data[filter3,]
+
+# Conversion en VCorpus
+Vdata = VCorpus(VectorSource(data_filtered_2008_3$headline_text))
+
+# Nettoyage du contenu : suppression des stopwords, de la ponctuation et 
+# conversion en caractères minuscules
+
+custom_stopwords <- c("is","a","for","in")
+
+cleaned_corpus = tm_map(Vdata, content_transformer(tolower))
+cleaned_corpus = tm_map(cleaned_corpus,removePunctuation)
+cleaned_corpus = tm_map(cleaned_corpus, removeNumbers)
+cleaned_corpus = tm_map(cleaned_corpus, removeWords, stopwords('english'))
+cleaned_corpus = tm_map(cleaned_corpus, removeWords, custom_stopwords)
+
+# Transformation en Document Term Matrix
+dtmbis <- DocumentTermMatrix(cleaned_corpus)
+
+```
+
+
+```{r}
+findFreqTerms(dtmbis,15)
+selectTermSets(dtmbis,15)
+```
+```{r}
+# Dans cette partie, nous avons appliqué l'algorithme de Frequent Term Set 
+# comme vu en cours. Il s'agit de renvoyer les ensembles de termes les plus 
+# fréquents dans le corpus ainsi que leur couverture associée.
+
+# Le jeu de données utilisé est un sous ensemble du Document Term Matrix initial
+# auquel on a retiré les documents qui ne contenaient pas au moins un des 
+# frequent terms. Cette opération est effectuée pour se ramener à la situation 
+# du cours. De plus, le jeu de données à été restreint à 4 jours pour réduire
+# le temps d'exécution de l'algorithme.
+
+# Dans notre cas, nous avons observé que les ensembles sélectionnés n'étaient 
+# que des singletons, nous avons donc retiré la considération des combinaisons
+# de frequent terms lors de l'évaluation du standard overlap et du meilleur 
+# candidat. 
+
 ```
 
