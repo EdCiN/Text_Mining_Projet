@@ -9,6 +9,22 @@ output: html_notebook
 ######################### Projet Text Mining ###################################
 ################################################################################
 
+############################# Introduction #####################################
+
+# Ce notebook a été rédigé par Edwin Charotte et Arnaud Mouttapa dans le cadre 
+# du cours de Text Mining enseigné à CY TECH par M. Senoussi.
+# Le notebook comprend les trois première parties du sujet, qui devaient être 
+# rédigées en R.
+
+# Dans ce notebook, nous étudions le dataset abcnews. Le dataset est un corpus 
+# de documents qui sont des têtes d'affiches d'articles de la Australian 
+# Broadcasting Corporation, qui est le service public australien de nouvelles.
+# Les données couvrent les têtes d'affiche du 19/02/2003 au 31/12/2021 et 
+# traitent différents thèmes que nous allons étudier.
+
+
+# Imports
+
 library(tm)
 library(wordcloud)
 library(coop) # Pour la fonction sparsity
@@ -70,10 +86,11 @@ words <- names(frequency)
 wordcloud(words[1:100], frequency[1:100], color = brewer.pal(8,"Dark2"))
 ```
 ```{r}
-## Commentaire 
+## Commentaires
 
 # On remarque que police n'est pas présent dans le wordcloud
-# Il s'agit du mot le plus fréquent.
+# Il s'agit du mot le plus fréquent. Le wordcloud n'est pas assez grand
+# pour caser le mot police dans le wordcloud.
 # On retrouve en général des mots liés à l'Australie (qld, nrl, Sydney)
 # On retrouve également le mot "Olympics", ce qui était attendu pour l'année 2008
 # On retrouve beaucoup de mots du registre de la politique et de l'économie : 
@@ -147,7 +164,7 @@ for (topic in names(frequencies)) {
 ```{r}
 ###################### Modèle Bayesien ########################################
 
-### On regarde la proportion
+### On regarde la proportion de chaque classe
 class_counts <- table(df$topic)
 class_proportions <- class_counts / nrow(df)
 print(paste("Proportion de chaque classe : ", (list(class_proportions))))
@@ -156,7 +173,7 @@ print(paste("Proportion de chaque classe : ", (list(class_proportions))))
 
 ```{r}
 ###### Train/Test
-# Charger le package
+# Charger les packages
 
 library(tibble)
 library(caret)
@@ -174,9 +191,9 @@ testSet  <- df[-trainIndex, ]
 
 
 ```{r}
-## Verif proportion dans le train et le test
+## Verification des proportions dans le train set et le test set
 
-# Train
+# Train set
 train_class_counts <- table(trainSet$topic)
 train_class_proportions <- train_class_counts / nrow(trainSet)
 print("Proportion des classes dans le train set : ")
@@ -185,7 +202,7 @@ print(train_class_proportions)
 
 
 ```{r}
-# Test
+# Test set
 test_class_counts <- table(testSet$topic)
 test_class_proportions <- test_class_counts / nrow(testSet)
 print("Proportion des classes dans le test set")
@@ -197,14 +214,14 @@ print(test_class_proportions)
 
 ```{r}
 ### Model bayesien
-# Pour eviter le sur apprentissage et le biais on supprime les mots Iraq, Covid et Olympic
+# Pour eviter le sur-apprentissage et le biais, on supprime les mots Iraq, Covid et Olympic
 
 library(stringr)
 trainSet <- trainSet %>%
   mutate(headline_text = str_replace_all(headline_text, "\\b(iraq|covid|olympic)\\b", ""))
 
 # Corpus
-crp= Corpus(VectorSource(trainSet$headline_text))
+crp = Corpus(VectorSource(trainSet$headline_text))
 
 # Cleaning
 clean_crp <- tm_map(crp, content_transformer(tolower))
@@ -213,11 +230,12 @@ clean_crp <- tm_map(clean_crp, removePunctuation)
 clean_crp <- tm_map(clean_crp, removeNumbers)
 
 # Matrice
-matrice=as.matrix(DocumentTermMatrix(clean_crp))
+matrice = as.matrix(DocumentTermMatrix(clean_crp))
 
 # Création du modèle
 
 library(naivebayes)
+
 model <- multinomial_naive_bayes(y=trainSet$topic,x=matrice)
 
 # Préparation des données de test de la même manière
@@ -241,7 +259,7 @@ print(predictions)
 
 
 ```{r}
-############## Accuracy, precision, recall, f1 ##############################
+############## Accuracy, precision, recall, F1 ##############################
 
 # Matrice confusion
 print("Matrice de confusion : ")
@@ -484,6 +502,10 @@ selectTermSets(dtmbis,15)
 # que des singletons, nous avons donc retiré la considération des combinaisons
 # de frequent terms lors de l'évaluation du standard overlap et du meilleur 
 # candidat. 
+
+# On observe que tous les mots appartenant au mots candidats sont sélectionnés
+# pour constituer les Selected Term Sets. On retrouve également pour chaque mot
+# sa couverture associée.
 
 ```
 
